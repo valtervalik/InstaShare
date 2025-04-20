@@ -1,11 +1,12 @@
 import { HttpService } from '@nestjs/axios';
-import { BadRequestException, HttpStatus } from '@nestjs/common';
+import { BadRequestException, HttpStatus, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import { AllConfigType } from 'src/config/config.type';
 import { MinioService } from 'src/minio/minio.service';
 import { FilesController } from './files.controller';
 import { FilesService } from './files.service';
+import { UploadStatusService } from './upload-status.service';
 
 describe('FilesController', () => {
   let controller: FilesController;
@@ -13,6 +14,7 @@ describe('FilesController', () => {
   let minioService: any;
   let httpService: any;
   let configService: any;
+  let uploadStatusService: any;
 
   beforeEach(async () => {
     const mockFilesService = {
@@ -28,10 +30,18 @@ describe('FilesController', () => {
       deleteFile: jest.fn(),
       getFileUrl: jest.fn(),
       updateFileName: jest.fn(),
+      uploadBuffer: jest.fn().mockResolvedValue('refPath'),
     } as any;
     const mockHttpService = { get: jest.fn() } as any;
     const mockConfigService = {
       get: jest.fn().mockReturnValue('basePath/'),
+    } as any;
+    const mockUploadStatusService = {
+      createJob: jest.fn().mockReturnValue('job-1'),
+      getStatus: jest.fn().mockReturnValue({ status: 'pending', progress: 0 }),
+      updateProgress: jest.fn(),
+      complete: jest.fn(),
+      fail: jest.fn(),
     } as any;
 
     const module: TestingModule = await Test.createTestingModule({
@@ -41,6 +51,7 @@ describe('FilesController', () => {
         { provide: MinioService, useValue: mockMinioService },
         { provide: HttpService, useValue: mockHttpService },
         { provide: ConfigService<AllConfigType>, useValue: mockConfigService },
+        { provide: UploadStatusService, useValue: mockUploadStatusService },
       ],
     }).compile();
 
@@ -49,6 +60,7 @@ describe('FilesController', () => {
     minioService = module.get(MinioService) as any;
     httpService = module.get(HttpService) as any;
     configService = module.get(ConfigService) as any;
+    uploadStatusService = module.get(UploadStatusService);
   });
 
   it('should be defined', () => {
@@ -63,33 +75,16 @@ describe('FilesController', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('should upload file and create record', async () => {
+    it('should initiate upload job when file provided', async () => {
       const dto = { filename: 'f', category: 1 } as any;
-      const file = {
-        originalname: 'test.txt',
-        buffer: Buffer.from(''),
-        size: 10,
-      } as any;
-      const activeUser = {
-        sub: 'u',
-        email: 'e',
-        role: {} as any,
-        permission: {} as any,
-      };
-      minioService.uploadFile.mockResolvedValue('refPath');
-      filesService.create.mockResolvedValue({ id: '1' } as any);
-
-      const result = await controller.upload(dto, file, activeUser);
-      expect(minioService.createBucketIfNotExists).toHaveBeenCalled();
-      expect(minioService.uploadFile).toHaveBeenCalledWith(file, 'basePath/f');
-      expect(filesService.create).toHaveBeenCalledWith(
-        { filename: 'f', category: 1, ref: 'refPath' },
-        activeUser,
-      );
-      expect(result).toEqual({
-        message: 'File uploaded successfully',
-        statusCode: HttpStatus.CREATED,
-        data: { id: '1' },
+      const file = { originalname: 'test.txt', buffer: Buffer.from(''), size: 10 } as any;
+      const activeUser = {} as any;
+      const res = await controller.upload(dto, file, activeUser);
+      expect(uploadStatusService.createJob).toHaveBeenCalled();
+      expect(res).toEqual({
+        message: 'Upload initiated',
+        statusCode: HttpStatus.ACCEPTED,
+        data: { jobId: 'job-1' },
       });
     });
   });
@@ -126,6 +121,56 @@ describe('FilesController', () => {
     it('should propagate error when remove throws', async () => {
       filesService.findById.mockRejectedValue(new Error('fail'));
       await expect(controller.remove('1')).rejects.toThrow('fail');
+    });
+  });
+
+  describe('update', () => {
+    it('should initiate async replace when file provided', async () => {
+      const file = { originalname: 'a.txt' } as any;
+      const dto = { filename: 'new' } as any;
+      const user = {} as any;
+      const res = await controller.update('id', dto, file, user);
+      expect(uploadStatusService.createJob).toHaveBeenCalled();
+      expect(res.data).toEqual({ jobId: 'job-1' });
+      expect(res.statusCode).toBe(HttpStatus.ACCEPTED);
+    });
+
+    it('should initiate async rename when only filename provided', async () => {
+      const dto = { filename: 'renamed' } as any;
+      const res = await controller.update('id', dto, undefined as any, {} as any);
+      expect(uploadStatusService.createJob).toHaveBeenCalled();
+      expect(res.data).toEqual({ jobId: 'job-1' });
+      expect(res.statusCode).toBe(HttpStatus.ACCEPTED);
+    });
+  });
+
+  describe('getUpdateStatus', () => {
+    it('should return job status', async () => {
+      uploadStatusService.getStatus.mockReturnValue({ status: 'completed', progress: 100, result: { foo: 'bar' } });
+      const res = await controller.getUpdateStatus('job-1');
+      expect(uploadStatusService.getStatus).toHaveBeenCalledWith('job-1');
+      expect(res.data).toEqual({ status: 'completed', progress: 100, result: { foo: 'bar' } });
+      expect(res.statusCode).toBe(HttpStatus.OK);
+    });
+
+    it('should throw NotFoundException for unknown job', async () => {
+      uploadStatusService.getStatus.mockReturnValue(undefined);
+      await expect(controller.getUpdateStatus('unknown')).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('getUploadStatus', () => {
+    it('should return job status for upload', async () => {
+      uploadStatusService.getStatus.mockReturnValue({ status: 'processing', progress: 50 });
+      const res = await controller.getUploadStatus('job-1');
+      expect(uploadStatusService.getStatus).toHaveBeenCalledWith('job-1');
+      expect(res.data).toEqual({ status: 'processing', progress: 50 });
+      expect(res.statusCode).toBe(HttpStatus.OK);
+    });
+
+    it('should throw NotFoundException if upload job not found', async () => {
+      uploadStatusService.getStatus.mockReturnValue(undefined);
+      await expect(controller.getUploadStatus('unknown')).rejects.toThrow(NotFoundException);
     });
   });
 });
