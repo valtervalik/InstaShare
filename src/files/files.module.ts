@@ -5,6 +5,7 @@ import { MinioModule } from 'src/minio/minio.module';
 import { FilesController } from './files.controller';
 import { FilesService } from './files.service';
 import { File, FileSchema } from './schemas/file.schema';
+import { UploadStatusService } from './upload-status.service';
 
 @Module({
   imports: [
@@ -13,7 +14,7 @@ import { File, FileSchema } from './schemas/file.schema';
     HttpModule,
   ],
   controllers: [FilesController],
-  providers: [FilesService],
+  providers: [FilesService, UploadStatusService],
   exports: [MongooseModule],
 })
 export class FilesModule {}

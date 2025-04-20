@@ -29,6 +29,7 @@ import { apiResponseHandler } from 'src/utils/ApiResponseHandler';
 import { CreateFileDto } from './dto/create-file.dto';
 import { UpdateFileDto } from './dto/update-file.dto';
 import { FilesService } from './files.service';
+import { UploadStatusService } from './upload-status.service';
 const AdmZip = require('adm-zip');
 
 @Controller('files')
@@ -40,6 +41,7 @@ export class FilesController {
     private readonly minioService: MinioService,
     private readonly httpService: HttpService,
     private readonly configService: ConfigService<AllConfigType>,
+    private readonly uploadStatusService: UploadStatusService,
   ) {
     this.path = this.configService.get('files.path', { infer: true });
   }
@@ -51,43 +53,71 @@ export class FilesController {
     @UploadedFile() file: Express.Multer.File,
     @ActiveUser() activeUser: ActiveUserData,
   ) {
+    const jobId = this.uploadStatusService.createJob();
+
     if (!file) {
+      this.uploadStatusService.fail(jobId, 'Please upload a file');
       throw new BadRequestException('Please upload a file');
     }
 
-    await this.minioService.createBucketIfNotExists();
+    // start async processing
+    setImmediate(() => {
+      this.handleUpload(jobId, createFileDto, file, activeUser);
+    });
 
-    // compress incoming file to zip using its original name as entry
-    const zip = new AdmZip();
-    const stringArray = file.originalname.split('.');
-    const format = stringArray[stringArray.length - 1];
-    const fileName = `${createFileDto.filename}.${format}`;
+    return apiResponseHandler('Upload initiated', HttpStatus.ACCEPTED, {
+      jobId,
+    });
+  }
 
-    zip.addFile(fileName, file.buffer);
-    const zipBuffer = zip.toBuffer();
-    const zipName = `${createFileDto.filename}.zip`;
+  @Get('upload/status/:jobId')
+  async getUploadStatus(@Param('jobId') jobId: string) {
+    const status = this.uploadStatusService.getStatus(jobId);
+    if (!status) throw new NotFoundException('Upload job not found');
+    return apiResponseHandler('Upload status fetched', HttpStatus.OK, status);
+  }
 
-    const ref = await this.minioService.uploadBuffer(
-      zipBuffer,
-      this.path + zipName,
-    );
+  private async handleUpload(
+    jobId: string,
+    createFileDto: CreateFileDto,
+    file: Express.Multer.File,
+    activeUser: ActiveUserData,
+  ) {
+    try {
+      this.uploadStatusService.updateProgress(jobId, 10);
+      await this.minioService.createBucketIfNotExists();
 
-    const newFile = await this.filesService.create(
-      {
-        filename: fileName,
-        category: createFileDto.category,
-        ref,
-        size: file.size,
-        compressedSize: zipBuffer.length,
-      },
-      activeUser,
-    );
+      this.uploadStatusService.updateProgress(jobId, 30);
+      const zip = new AdmZip();
+      const stringArray = file.originalname.split('.');
+      const format = stringArray[stringArray.length - 1];
+      const fileName = `${createFileDto.filename}.${format}`;
+      zip.addFile(fileName, file.buffer);
+      const zipBuffer = zip.toBuffer();
+      const zipName = `${createFileDto.filename}.zip`;
 
-    return apiResponseHandler(
-      `File uploaded successfully`,
-      HttpStatus.CREATED,
-      newFile,
-    );
+      this.uploadStatusService.updateProgress(jobId, 60);
+      const ref = await this.minioService.uploadBuffer(
+        zipBuffer,
+        this.path + zipName,
+      );
+
+      this.uploadStatusService.updateProgress(jobId, 80);
+      const newFile = await this.filesService.create(
+        {
+          filename: fileName,
+          category: createFileDto.category,
+          ref,
+          size: file.size,
+          compressedSize: zipBuffer.length,
+        },
+        activeUser,
+      );
+
+      this.uploadStatusService.complete(jobId, newFile);
+    } catch (error) {
+      this.uploadStatusService.fail(jobId, error.message);
+    }
   }
 
   @Auth(AuthType.None)
@@ -143,6 +173,13 @@ export class FilesController {
     });
   }
 
+  @Get('update/status/:jobId')
+  async getUpdateStatus(@Param('jobId') jobId: string) {
+    const status = this.uploadStatusService.getStatus(jobId);
+    if (!status) throw new NotFoundException('Update job not found');
+    return apiResponseHandler('Update status fetched', HttpStatus.OK, status);
+  }
+
   @UseInterceptors(FileInterceptor('file'))
   @Patch(':id')
   async update(
@@ -151,45 +188,27 @@ export class FilesController {
     @UploadedFile() file: Express.Multer.File,
     @ActiveUser() activeUser: ActiveUserData,
   ) {
-    const foundFile = await this.filesService.findOne({
-      _id: id,
-      populate: ['category'],
-    });
-
-    if (foundFile.filename === updateFileDto.filename) {
-      delete updateFileDto.filename;
-    }
-
     if (file) {
-      await this.minioService.deleteFile(foundFile.ref);
-
-      if (!updateFileDto.filename) {
-        throw new BadRequestException('Please provide a filename');
-      }
-
-      // compress updated file to zip
-      const zip = new AdmZip();
-      const stringArray = file.originalname.split('.');
-      const format = stringArray[stringArray.length - 1];
-      const fileName = `${updateFileDto.filename}.${format}`;
-
-      zip.addFile(fileName, file.buffer);
-      const zipBuffer = zip.toBuffer();
-      const zipName = `${updateFileDto.filename}.zip`;
-
-      const ref = await this.minioService.uploadBuffer(
-        zipBuffer,
-        this.path + zipName,
+      const jobId = this.uploadStatusService.createJob();
+      setImmediate(() =>
+        this.handleFileReplace({ jobId, id, updateFileDto, file, activeUser }),
       );
-
+      return apiResponseHandler('Update initiated', HttpStatus.ACCEPTED, {
+        jobId,
+      });
+    } else if (updateFileDto.filename) {
+      const jobId = this.uploadStatusService.createJob();
+      setImmediate(() =>
+        this.handleFilenameReplace({ jobId, id, updateFileDto, activeUser }),
+      );
+      return apiResponseHandler('Update initiated', HttpStatus.ACCEPTED, {
+        jobId,
+      });
+    } else {
       const updatedFile = await this.filesService.update(
         id,
         {
-          filename: fileName,
-          category: updateFileDto.category || foundFile.category.id,
-          ref,
-          size: file.size,
-          compressedSize: zipBuffer.length,
+          ...updateFileDto,
         },
         { new: true },
         activeUser,
@@ -200,68 +219,123 @@ export class FilesController {
         HttpStatus.OK,
         updatedFile,
       );
-    } else {
+    }
+  }
+
+  private async handleFileReplace({
+    jobId,
+    id,
+    updateFileDto,
+    file,
+    activeUser,
+  }: {
+    jobId: string;
+    id: string;
+    updateFileDto: UpdateFileDto;
+    file: Express.Multer.File;
+    activeUser: ActiveUserData;
+  }) {
+    try {
+      this.uploadStatusService.updateProgress(jobId, 10);
+      const foundFile = await this.filesService.findById(id);
+      await this.minioService.deleteFile(foundFile.ref);
+
+      this.uploadStatusService.updateProgress(jobId, 30);
+      const zip = new AdmZip();
+      const ext = file.originalname.split('.').pop();
+      const filename = `${updateFileDto.filename}.${ext}`;
+      zip.addFile(filename, file.buffer);
+      const buffer = zip.toBuffer();
+      const zipName = `${updateFileDto.filename}.zip`;
+
+      this.uploadStatusService.updateProgress(jobId, 60);
+      const ref = await this.minioService.uploadBuffer(
+        buffer,
+        this.path + zipName,
+      );
+
+      this.uploadStatusService.updateProgress(jobId, 80);
+      const updated = await this.filesService.update(
+        id,
+        {
+          filename,
+          ref,
+          size: file.size,
+          compressedSize: buffer.length,
+          category: updateFileDto.category || foundFile.category._id,
+        },
+        { new: true },
+        activeUser,
+      );
+
+      this.uploadStatusService.complete(jobId, updated);
+    } catch (err) {
+      this.uploadStatusService.fail(jobId, err.message);
+    }
+  }
+
+  private async handleFilenameReplace({
+    jobId,
+    id,
+    updateFileDto,
+    activeUser,
+  }: {
+    jobId: string;
+    id: string;
+    updateFileDto: UpdateFileDto;
+    activeUser: ActiveUserData;
+  }) {
+    try {
+      this.uploadStatusService.updateProgress(jobId, 10);
+      const foundFile = await this.filesService.findOne({
+        _id: id,
+        populate: ['category'],
+      });
+
       const stringArray = foundFile.filename.split('.');
       const format = stringArray[stringArray.length - 1];
+      const fileName = `${updateFileDto.filename}.${format}`;
 
-      if (updateFileDto.filename) {
-        const fileName = `${updateFileDto.filename}.${format}`;
-        // rename ZIP entry and archive name
-        const oldRef = foundFile.ref;
-        const oldBuffer = await this.minioService.getFileBuffer(oldRef);
-        const AdmZip = require('adm-zip');
-        const zip = new AdmZip(oldBuffer);
-        const entries = zip.getEntries();
+      this.uploadStatusService.updateProgress(jobId, 30);
+      const oldRef = foundFile.ref;
+      const oldBuffer = await this.minioService.getFileBuffer(oldRef);
+      const zip = new AdmZip(oldBuffer);
+      const entries = zip.getEntries();
 
-        if (!entries.length) {
-          throw new BadRequestException('ZIP archive is empty');
-        }
-
-        const oldEntryName = entries[0].entryName;
-        const content = zip.readFile(entries[0]);
-        zip.deleteFile(oldEntryName);
-        zip.addFile(fileName, content);
-        const newZipBuffer = zip.toBuffer();
-        const newZipName = `${updateFileDto.filename}.zip`;
-        // upload renamed zip and remove old
-        const newRef = await this.minioService.uploadBuffer(
-          newZipBuffer,
-          this.path + newZipName,
-        );
-        await this.minioService.deleteFile(oldRef);
-        const updatedFile = await this.filesService.update(
-          id,
-          {
-            filename: fileName,
-            category: updateFileDto.category || foundFile.category.id,
-            ref: newRef,
-            compressedSize: newZipBuffer.length,
-          },
-          { new: true },
-          activeUser,
-        );
-
-        return apiResponseHandler(
-          'File updated successfully',
-          HttpStatus.OK,
-          updatedFile,
-        );
-      } else {
-        const updatedFile = await this.filesService.update(
-          id,
-          {
-            ...updateFileDto,
-          },
-          { new: true },
-          activeUser,
-        );
-
-        return apiResponseHandler(
-          'File updated successfully',
-          HttpStatus.OK,
-          updatedFile,
-        );
+      if (!entries.length) {
+        throw new BadRequestException('ZIP archive is empty');
       }
+
+      const oldEntryName = entries[0].entryName;
+      const content = zip.readFile(entries[0]);
+      zip.deleteFile(oldEntryName);
+      zip.addFile(fileName, content);
+      const newZipBuffer = zip.toBuffer();
+      const newZipName = `${updateFileDto.filename}.zip`;
+
+      this.uploadStatusService.updateProgress(jobId, 60);
+      const newRef = await this.minioService.uploadBuffer(
+        newZipBuffer,
+        this.path + newZipName,
+      );
+      await this.minioService.deleteFile(oldRef);
+
+      this.uploadStatusService.updateProgress(jobId, 80);
+      const updatedFile = await this.filesService.update(
+        id,
+        {
+          filename: fileName,
+          category: updateFileDto.category || foundFile.category.id,
+          ref: newRef,
+          compressedSize: newZipBuffer.length,
+        },
+        { new: true },
+        activeUser,
+      );
+
+      this.uploadStatusService.complete(jobId, updatedFile);
+    } catch (err) {
+      this.uploadStatusService.fail(jobId, err.message);
     }
   }
 
