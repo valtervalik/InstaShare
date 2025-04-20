@@ -29,7 +29,6 @@ import { apiResponseHandler } from 'src/utils/ApiResponseHandler';
 import { CreateFileDto } from './dto/create-file.dto';
 import { UpdateFileDto } from './dto/update-file.dto';
 import { FilesService } from './files.service';
-import { fileFilter } from './utils/fileFilter';
 const AdmZip = require('adm-zip');
 
 @Controller('files')
@@ -45,11 +44,7 @@ export class FilesController {
     this.path = this.configService.get('files.path', { infer: true });
   }
 
-  @UseInterceptors(
-    FileInterceptor('file', {
-      fileFilter,
-    }),
-  )
+  @UseInterceptors(FileInterceptor('file'))
   @Post('upload')
   async upload(
     @Body() createFileDto: CreateFileDto,
@@ -148,11 +143,7 @@ export class FilesController {
     });
   }
 
-  @UseInterceptors(
-    FileInterceptor('file', {
-      fileFilter,
-    }),
-  )
+  @UseInterceptors(FileInterceptor('file'))
   @Patch(':id')
   async update(
     @Param('id', ParseObjectIdPipe) id: string,
