@@ -14,6 +14,9 @@ export class File extends BaseSchema {
   @Prop({ type: Number })
   size: number;
 
+  @Prop({ type: Number })
+  compressedSize: number;
+
   @Prop({ type: String })
   ref: string;
 

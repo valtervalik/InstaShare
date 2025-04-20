@@ -30,6 +30,7 @@ import { CreateFileDto } from './dto/create-file.dto';
 import { UpdateFileDto } from './dto/update-file.dto';
 import { FilesService } from './files.service';
 import { fileFilter } from './utils/fileFilter';
+const AdmZip = require('adm-zip');
 
 @Controller('files')
 export class FilesController {
@@ -61,17 +62,28 @@ export class FilesController {
 
     await this.minioService.createBucketIfNotExists();
 
-    const ref = await this.minioService.uploadFile(
-      file,
-      this.path + createFileDto.filename,
+    // compress incoming file to zip using its original name as entry
+    const zip = new AdmZip();
+    const stringArray = file.originalname.split('.');
+    const format = stringArray[stringArray.length - 1];
+    const fileName = `${createFileDto.filename}.${format}`;
+
+    zip.addFile(fileName, file.buffer);
+    const zipBuffer = zip.toBuffer();
+    const zipName = `${createFileDto.filename}.zip`;
+
+    const ref = await this.minioService.uploadBuffer(
+      zipBuffer,
+      this.path + zipName,
     );
 
     const newFile = await this.filesService.create(
       {
-        filename: createFileDto.filename,
+        filename: fileName,
         category: createFileDto.category,
         ref,
         size: file.size,
+        compressedSize: zipBuffer.length,
       },
       activeUser,
     );
@@ -160,17 +172,33 @@ export class FilesController {
     if (file) {
       await this.minioService.deleteFile(foundFile.ref);
 
-      const ref = await this.minioService.uploadFile(
-        file,
-        this.path + (updateFileDto.filename || file.filename),
+      if (!updateFileDto.filename) {
+        throw new BadRequestException('Please provide a filename');
+      }
+
+      // compress updated file to zip
+      const zip = new AdmZip();
+      const stringArray = file.originalname.split('.');
+      const format = stringArray[stringArray.length - 1];
+      const fileName = `${updateFileDto.filename}.${format}`;
+
+      zip.addFile(fileName, file.buffer);
+      const zipBuffer = zip.toBuffer();
+      const zipName = `${updateFileDto.filename}.zip`;
+
+      const ref = await this.minioService.uploadBuffer(
+        zipBuffer,
+        this.path + zipName,
       );
 
       const updatedFile = await this.filesService.update(
         id,
         {
-          filename: updateFileDto.filename || file.filename,
+          filename: fileName,
           category: updateFileDto.category || foundFile.category.id,
           ref,
+          size: file.size,
+          compressedSize: zipBuffer.length,
         },
         { new: true },
         activeUser,
@@ -182,21 +210,41 @@ export class FilesController {
         updatedFile,
       );
     } else {
-      const stringArray = foundFile.ref.split('.');
+      const stringArray = foundFile.filename.split('.');
       const format = stringArray[stringArray.length - 1];
 
       if (updateFileDto.filename) {
-        const { filename: ref } = await this.minioService.updateFileName(
-          foundFile.ref,
-          this.path + updateFileDto.filename,
-          format,
-        );
+        const fileName = `${updateFileDto.filename}.${format}`;
+        // rename ZIP entry and archive name
+        const oldRef = foundFile.ref;
+        const oldBuffer = await this.minioService.getFileBuffer(oldRef);
+        const AdmZip = require('adm-zip');
+        const zip = new AdmZip(oldBuffer);
+        const entries = zip.getEntries();
 
+        if (!entries.length) {
+          throw new BadRequestException('ZIP archive is empty');
+        }
+
+        const oldEntryName = entries[0].entryName;
+        const content = zip.readFile(entries[0]);
+        zip.deleteFile(oldEntryName);
+        zip.addFile(fileName, content);
+        const newZipBuffer = zip.toBuffer();
+        const newZipName = `${updateFileDto.filename}.zip`;
+        // upload renamed zip and remove old
+        const newRef = await this.minioService.uploadBuffer(
+          newZipBuffer,
+          this.path + newZipName,
+        );
+        await this.minioService.deleteFile(oldRef);
         const updatedFile = await this.filesService.update(
           id,
           {
-            ...updateFileDto,
-            ref,
+            filename: fileName,
+            category: updateFileDto.category || foundFile.category.id,
+            ref: newRef,
+            compressedSize: newZipBuffer.length,
           },
           { new: true },
           activeUser,

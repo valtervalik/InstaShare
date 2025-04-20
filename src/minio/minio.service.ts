@@ -36,12 +36,32 @@ export class MinioService {
     return fileName;
   }
 
+  async uploadBuffer(buffer: Buffer, filename: string) {
+    await this.minioClient.putObject(
+      this.bucketName,
+      filename,
+      buffer,
+      buffer.length,
+    );
+    return filename;
+  }
+
   async getFileUrl(fileName: string) {
     return await this.minioClient.presignedUrl(
       'GET',
       this.bucketName,
       fileName,
     );
+  }
+
+  async getFileBuffer(fileName: string): Promise<Buffer> {
+    const stream = await this.minioClient.getObject(this.bucketName, fileName);
+    const chunks: Buffer[] = [];
+    return new Promise<Buffer>((resolve, reject) => {
+      stream.on('data', (chunk: Buffer) => chunks.push(chunk));
+      stream.on('end', () => resolve(Buffer.concat(chunks)));
+      stream.on('error', reject);
+    });
   }
 
   async updateFileName(
