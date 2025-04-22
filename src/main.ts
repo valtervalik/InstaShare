@@ -15,7 +15,10 @@ async function bootstrap() {
   useContainer(app.select(AppModule), { fallbackOnErrors: true });
   const configService = app.get(ConfigService<AllConfigType>);
 
-  app.enableCors();
+  app.enableCors({
+    origin: [configService.get('app.origin', { infer: true })],
+    credentials: true,
+  });
   app.use(compression());
   app.use(cookieParser());
 

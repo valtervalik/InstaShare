@@ -9,8 +9,6 @@ import {
   Post,
 } from '@nestjs/common';
 import { ParseObjectIdPipe } from '@nestjs/mongoose';
-import { Auth } from 'src/auth/authentication/decorators/auth.decorator';
-import { AuthType } from 'src/auth/authentication/enums/auth-type.enum';
 import { ActiveUser } from 'src/auth/decorators/active-user.decorator';
 import { ActiveUserData } from 'src/auth/interfaces/active-user-data.interface';
 import { apiResponseHandler } from 'src/utils/ApiResponseHandler';
@@ -39,7 +37,6 @@ export class FileCategoriesController {
     );
   }
 
-  @Auth(AuthType.None)
   @Get()
   findAll() {
     return this.fileCategoriesService.findAllWithoutPagination({
