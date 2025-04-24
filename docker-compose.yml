@@ -21,7 +21,7 @@ services:
       - '${MINIO_API_PORT}:9000'
       - '${MINIO_WEBUI_PORT}:9001'
     volumes:
-      - 'minio_data:/data'
+      - 'minio_data:/data/minio'
     networks:
       instashare-network:
         ipv4_address: 172.25.0.5
