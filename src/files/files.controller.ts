@@ -18,6 +18,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { ParseObjectIdPipe } from '@nestjs/mongoose';
 import { FileInterceptor } from '@nestjs/platform-express';
+import * as AdmZip from 'adm-zip';
 import { Response } from 'express';
 import { Auth } from 'src/auth/authentication/decorators/auth.decorator';
 import { AuthType } from 'src/auth/authentication/enums/auth-type.enum';
@@ -30,7 +31,6 @@ import { CreateFileDto } from './dto/create-file.dto';
 import { UpdateFileDto } from './dto/update-file.dto';
 import { FilesService } from './files.service';
 import { UploadStatusService } from './upload-status.service';
-const AdmZip = require('adm-zip');
 
 @Controller('files')
 export class FilesController {
@@ -143,7 +143,6 @@ export class FilesController {
     );
   }
 
-  @Auth(AuthType.None)
   @Get('download/:id')
   async download(
     @Param('id', ParseObjectIdPipe) id: string,
