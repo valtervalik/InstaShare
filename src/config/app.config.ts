@@ -22,6 +22,9 @@ class EnvironmentVariablesValidator {
 
   @IsString()
   APP_NAME: string;
+
+  @IsString()
+  APP_ORIGIN: string;
 }
 
 export default registerAs<AppConfig>('app', () => {
@@ -35,5 +38,6 @@ export default registerAs<AppConfig>('app', () => {
         ? parseInt(process.env.PORT, 10)
         : 5000,
     name: process.env.APP_NAME,
+    origin: process.env.APP_ORIGIN,
   };
 });

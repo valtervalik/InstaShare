@@ -12,6 +12,11 @@ import databaseConfig from './database/config/database.config';
 import { DatabaseModule } from './database/database.module';
 import eMailerConfig from './e-mailer/config/e-mailer.config';
 import { EMailerModule } from './e-mailer/e-mailer.module';
+import { FileCategoriesModule } from './file-categories/file-categories.module';
+import filesConfig from './files/config/files.config';
+import { FilesModule } from './files/files.module';
+import minioConfig from './minio/config/minio.config';
+import { MinioModule } from './minio/minio.module';
 import redisConfig from './redis/config/redis.config';
 
 @Module({
@@ -26,6 +31,8 @@ import redisConfig from './redis/config/redis.config';
         eMailerConfig,
         redisConfig,
         cryptoConfig,
+        minioConfig,
+        filesConfig,
       ],
       envFilePath: '.env',
     }),
@@ -33,6 +40,9 @@ import redisConfig from './redis/config/redis.config';
     DatabaseModule,
     AuthModule,
     TypedEventEmitterModule,
+    MinioModule,
+    FileCategoriesModule,
+    FilesModule,
     ...(process.env.EMAIL_USER ? [EMailerModule] : []),
     ...(process.env.GOOGLE_CLIENT_ID ? [GoogleAuthModule] : []),
   ],
