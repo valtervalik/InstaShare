@@ -41,6 +41,10 @@ export class AuthenticationController {
   @Auth(AuthType.None)
   @Post('sign-up')
   async signUp(@Body() signUpDto: SignUpDto) {
+    if (signUpDto.password !== signUpDto.confirmPassword) {
+      throw new BadRequestException('Passwords do not match');
+    }
+
     const user = await this.authenticationService.create(signUpDto);
 
     this.eventEmitter.emit('user.welcome', {

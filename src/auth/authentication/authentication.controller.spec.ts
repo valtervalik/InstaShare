@@ -90,7 +90,11 @@ describe('AuthenticationController - methods', () => {
   });
 
   it('should sign up user and emit welcome event', async () => {
-    const dto = { email: 'a@b.com', password: 'pass' } as any;
+    const dto = {
+      email: 'a@b.com',
+      password: 'pass',
+      confirmPassword: 'pass',
+    } as any;
     const user = { id: '1' } as any;
     authService.create.mockResolvedValue(user);
 
