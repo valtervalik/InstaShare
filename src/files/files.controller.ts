@@ -20,8 +20,6 @@ import { ParseObjectIdPipe } from '@nestjs/mongoose';
 import { FileInterceptor } from '@nestjs/platform-express';
 import * as AdmZip from 'adm-zip';
 import { Response } from 'express';
-import { Auth } from 'src/auth/authentication/decorators/auth.decorator';
-import { AuthType } from 'src/auth/authentication/enums/auth-type.enum';
 import { ActiveUser } from 'src/auth/decorators/active-user.decorator';
 import { ActiveUserData } from 'src/auth/interfaces/active-user-data.interface';
 import { AllConfigType } from 'src/config/config.type';
@@ -120,7 +118,6 @@ export class FilesController {
     }
   }
 
-  @Auth(AuthType.None)
   @Get()
   async findAllByCategory(
     @Query()
@@ -133,11 +130,13 @@ export class FilesController {
       limit: number;
       category?: number;
     },
+    @ActiveUser() activeUser: ActiveUserData,
   ) {
     return this.filesService.findAll(
       {
         populate: ['category'],
         ...(category && { category }),
+        createdBy: activeUser.sub,
       },
       { page, limit },
     );

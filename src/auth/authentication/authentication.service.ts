@@ -106,6 +106,7 @@ export class AuthenticationService extends BaseService<UserDocument>(
       },
     );
   }
+
   async generateTokens(user: User, response: Response) {
     const refreshTokenId = randomUUID();
     const [accessToken, refreshToken] = await Promise.all([

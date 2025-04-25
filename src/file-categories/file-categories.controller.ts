@@ -38,9 +38,10 @@ export class FileCategoriesController {
   }
 
   @Get()
-  findAll() {
+  findAll(@ActiveUser() activeUser: ActiveUserData) {
     return this.fileCategoriesService.findAllWithoutPagination({
       order: 'name',
+      createdBy: activeUser.sub,
     });
   }
 

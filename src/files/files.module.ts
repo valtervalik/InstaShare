@@ -15,6 +15,6 @@ import { UploadStatusService } from './upload-status.service';
   ],
   controllers: [FilesController],
   providers: [FilesService, UploadStatusService],
-  exports: [MongooseModule],
+  exports: [MongooseModule, FilesService],
 })
 export class FilesModule {}
