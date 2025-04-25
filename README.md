@@ -1,59 +1,84 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="200" alt="Nest Logo" /></a>
-</p>
+# InstaShare Setup Guide
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+This guide provides step-by-step instructions to set up and run the InstaShare server, built with NestJS.
 
-<h1 align="center"> Nestjs Authentication and Authorization Module with MongoDB and Redis </h1>
+## Prerequisites
 
-## Description
+Before setting up the project, ensure you have the following installed on your system:
 
-This is an authentication and authorization Nestjs module. It implements JWT access and refresh tokens in the safest way using HTTPOnly cookies and Redis for token invalidation. It also implements user roles and permissions for authorization using Nestjs guards. The database used for storing user, role, and permission entities is MongoDB.
+1. **Node.js** (version 16 or newer) - [Download Node.js](https://nodejs.org/)
+2. **pnpm** (latest)
+3. **Docker**
 
-In addition to these features, this template provides Two Factor Authentication and Google OAuth2 authentication functionalities.
+## Steps to Set Up the Project
 
-## Steps to Run the Application
+Follow these steps to get the project up and running:
 
-1. **Clone the repository**: Use git clone command to clone the repository to your local machine.
-
+### 1. Clone the Repository
+Clone the repository to your local machine using the following command:
 ```bash
-git clone --depth 1 https://github.com/valtervalik/Nestjs-Mongoose-Auth-Template.git my-app
+git clone https://github.com/valtervalik/InstaShare.git
 ```
 
-2. **Enter the project folder and copy .env.example as .env**:
+Navigate into the project directory:
 
 ```bash
-cd my-app
-cp .env.example .env
+cd InstaShare
 ```
 
-3. **Install dependencies**: Run any of the following commands to install all the necessary dependencies.
+2. Install Dependencies
+Install the required dependencies by running:
 
-```bash
-npm install
-```
-```bash
-yarn install
-```
 ```bash
 pnpm install
 ```
 
-4. **Run docker-compose**: Use the following command to start the Docker containers.
+3. Configure Environment Variables
+Make a copy of .env.example:
 
 ```bash
-docker-compose up -d
+cp .env.example .env
 ```
 
-5. **Run the application in development mode**: Use any of the following commands to start the application in development mode.
+4. Run docker containers
+```bash
+docker compose up -d
+```
 
-```bash
-npm run start:dev
-```
-```bash
-yarn start:dev
-```
+5. Start the Development Server
+Start the development server with the following command:
+
 ```bash
 pnpm start:dev
 ```
+The application will be accessible at http://localhost:3000 by default.
+
+Building and Running for Production
+To build and run the application in production mode, follow these steps:
+
+1. Build the Application
+Generate the production build:
+
+```bash
+pnpm build
+```
+
+2. Start the Production Server
+Run the production server:
+
+```bash
+pnpm start:prod
+```
+The application will be available at the configured port (default: 3000).
+
+Testing
+Run the tests to ensure everything is working as expected:
+
+```bash
+pnpm test
+```
+
+Additional Notes
+Refer to the package.json file for additional scripts and commands.
+Ensure all required environment variables are properly configured before running the application.
+If you encounter any issues, check the logs or open an issue in the repository.
