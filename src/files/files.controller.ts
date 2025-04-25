@@ -130,11 +130,13 @@ export class FilesController {
       limit: number;
       category?: number;
     },
+    @ActiveUser() activeUser: ActiveUserData,
   ) {
     return this.filesService.findAll(
       {
         populate: ['category'],
         ...(category && { category }),
+        createdBy: activeUser.sub,
       },
       { page, limit },
     );
