@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { EventEmitterModule } from '@nestjs/event-emitter';
+import { ScheduleModule } from '@nestjs/schedule';
 import googleConfig from './auth-google/config/google.config';
 import { GoogleAuthModule } from './auth-google/google-auth.module';
 import { AuthModule } from './auth/auth.module';
@@ -16,7 +17,7 @@ import { FileCategoriesModule } from './file-categories/file-categories.module';
 import filesConfig from './files/config/files.config';
 import { FilesModule } from './files/files.module';
 import minioConfig from './minio/config/minio.config';
-import { MinioModule } from './minio/minio.module';
+import { QueueModule } from './queue/queue.module';
 import redisConfig from './redis/config/redis.config';
 
 @Module({
@@ -37,10 +38,11 @@ import redisConfig from './redis/config/redis.config';
       envFilePath: '.env',
     }),
     EventEmitterModule.forRoot(),
+    ScheduleModule.forRoot(),
+    QueueModule,
     DatabaseModule,
     AuthModule,
     TypedEventEmitterModule,
-    MinioModule,
     FileCategoriesModule,
     FilesModule,
     ...(process.env.EMAIL_USER ? [EMailerModule] : []),

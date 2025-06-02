@@ -1,4 +1,5 @@
 import { HttpService } from '@nestjs/axios';
+import { InjectQueue } from '@nestjs/bullmq';
 import {
   BadRequestException,
   Body,
@@ -19,12 +20,14 @@ import { ConfigService } from '@nestjs/config';
 import { ParseObjectIdPipe } from '@nestjs/mongoose';
 import { FileInterceptor } from '@nestjs/platform-express';
 import * as AdmZip from 'adm-zip';
+import { Queue } from 'bullmq';
 import { Response } from 'express';
 import { ActiveUser } from 'src/auth/decorators/active-user.decorator';
 import { ActiveUserData } from 'src/auth/interfaces/active-user-data.interface';
 import { AllConfigType } from 'src/config/config.type';
 import { MinioService } from 'src/minio/minio.service';
 import { apiResponseHandler } from 'src/utils/ApiResponseHandler';
+import { FilesQueueKeys } from './constants/files-queue-keys.enum';
 import { CreateFileDto } from './dto/create-file.dto';
 import { UpdateFileDto } from './dto/update-file.dto';
 import { FilesService } from './files.service';
@@ -35,6 +38,8 @@ export class FilesController {
   private readonly path: string;
 
   constructor(
+    @InjectQueue(FilesQueueKeys.UPLOAD)
+    private readonly filesUploadQueue: Queue,
     private readonly filesService: FilesService,
     private readonly minioService: MinioService,
     private readonly httpService: HttpService,
@@ -51,28 +56,22 @@ export class FilesController {
     @UploadedFile() file: Express.Multer.File,
     @ActiveUser() activeUser: ActiveUserData,
   ) {
-    const jobId = this.uploadStatusService.createJob();
-
     if (!file) {
-      this.uploadStatusService.fail(jobId, 'Please upload a file');
       throw new BadRequestException('Please upload a file');
     }
+    // Convert buffer to base64 string for queue serialization
+    const fileForQueue = {
+      ...file,
+      buffer: file.buffer.toString('base64'),
+    };
 
-    // start async processing
-    setImmediate(() => {
-      this.handleUpload(jobId, createFileDto, file, activeUser);
+    await this.filesUploadQueue.add(FilesQueueKeys.UPLOAD, {
+      body: createFileDto,
+      file: fileForQueue,
+      activeUser,
     });
 
-    return apiResponseHandler('Upload initiated', HttpStatus.ACCEPTED, {
-      jobId,
-    });
-  }
-
-  @Get('upload/status/:jobId')
-  async getUploadStatus(@Param('jobId') jobId: string) {
-    const status = this.uploadStatusService.getStatus(jobId);
-    if (!status) throw new NotFoundException('Upload job not found');
-    return apiResponseHandler('Upload status fetched', HttpStatus.OK, status);
+    return apiResponseHandler('Upload initiated', HttpStatus.ACCEPTED);
   }
 
   private async handleUpload(
