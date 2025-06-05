@@ -16,9 +16,13 @@ export class MinioService {
   }
 
   async createBucketIfNotExists() {
-    const bucketExists = await this.minioClient.bucketExists(this.bucketName);
-    if (!bucketExists) {
-      await this.minioClient.makeBucket(this.bucketName, 'eu-west-1');
+    try {
+      const bucketExists = await this.minioClient.bucketExists(this.bucketName);
+      if (!bucketExists) {
+        await this.minioClient.makeBucket(this.bucketName, 'eu-west-1');
+      }
+    } catch (error) {
+      throw new Error(`Failed to create or access bucket: ${error}`);
     }
   }
 
@@ -27,41 +31,60 @@ export class MinioService {
     const format = stringArray[stringArray.length - 1];
 
     const fileName = `${filename}.${format}`;
-    await this.minioClient.putObject(
-      this.bucketName,
-      fileName,
-      file.buffer,
-      file.size,
-    );
-    return fileName;
+    try {
+      await this.minioClient.putObject(
+        this.bucketName,
+        fileName,
+        file.buffer,
+        file.size,
+      );
+      return fileName;
+    } catch (error) {
+      throw new Error(`Failed to upload file: ${error}`);
+    }
   }
 
   async uploadBuffer(buffer: Buffer, filename: string) {
-    await this.minioClient.putObject(
-      this.bucketName,
-      filename,
-      buffer,
-      buffer.length,
-    );
-    return filename;
+    try {
+      await this.minioClient.putObject(
+        this.bucketName,
+        filename,
+        buffer,
+        buffer.length,
+      );
+      return filename;
+    } catch (error) {
+      throw new Error(`Failed to upload buffer: ${error}`);
+    }
   }
 
   async getFileUrl(fileName: string) {
-    return await this.minioClient.presignedUrl(
-      'GET',
-      this.bucketName,
-      fileName,
-    );
+    try {
+      return await this.minioClient.presignedUrl(
+        'GET',
+        this.bucketName,
+        fileName,
+      );
+    } catch (error) {
+      throw new Error(`Failed to get file URL: ${error}`);
+    }
   }
 
   async getFileBuffer(fileName: string): Promise<Buffer> {
-    const stream = await this.minioClient.getObject(this.bucketName, fileName);
-    const chunks: Buffer[] = [];
-    return new Promise<Buffer>((resolve, reject) => {
-      stream.on('data', (chunk: Buffer) => chunks.push(chunk));
-      stream.on('end', () => resolve(Buffer.concat(chunks)));
-      stream.on('error', reject);
-    });
+    try {
+      const stream = await this.minioClient.getObject(
+        this.bucketName,
+        fileName,
+      );
+      const chunks: Buffer[] = [];
+      return new Promise<Buffer>((resolve, reject) => {
+        stream.on('data', (chunk: Buffer) => chunks.push(chunk));
+        stream.on('end', () => resolve(Buffer.concat(chunks)));
+        stream.on('error', reject);
+      });
+    } catch (error) {
+      throw new Error(`Failed to get file buffer: ${error}`);
+    }
   }
 
   async updateFileName(
@@ -69,22 +92,30 @@ export class MinioService {
     newFileName: string,
     format: string,
   ) {
-    await this.minioClient.copyObject(
-      this.bucketName,
-      `${newFileName}.${format}`,
-      `/${this.bucketName}/${oldFileName}`,
-      new CopyConditions(),
-    );
+    try {
+      await this.minioClient.copyObject(
+        this.bucketName,
+        `${newFileName}.${format}`,
+        `/${this.bucketName}/${oldFileName}`,
+        new CopyConditions(),
+      );
 
-    await this.deleteFile(oldFileName);
+      await this.deleteFile(oldFileName);
 
-    return {
-      filename: `${newFileName}.${format}`,
-      url: await this.getFileUrl(`${newFileName}.${format}`),
-    };
+      return {
+        filename: `${newFileName}.${format}`,
+        url: await this.getFileUrl(`${newFileName}.${format}`),
+      };
+    } catch (error) {
+      throw new Error(`Failed to update file name: ${error}`);
+    }
   }
 
   async deleteFile(fileName: string) {
-    await this.minioClient.removeObject(this.bucketName, fileName);
+    try {
+      await this.minioClient.removeObject(this.bucketName, fileName);
+    } catch (error) {
+      throw new Error(`Failed to delete file: ${error}`);
+    }
   }
 }
