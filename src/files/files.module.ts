@@ -4,11 +4,12 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { MinioModule } from 'src/minio/minio.module';
 import { FilesQueueKeys } from './constants/files-queue-keys.enum';
+import { FilesCompressionCron } from './cron/files-compression.cron';
 import { FilesController } from './files.controller';
 import { FilesService } from './files.service';
+import { FilesCompressionProcessor } from './queue/files-compression.consumer';
 import { FilesUploadProcessor } from './queue/files-upload.consumer';
 import { File, FileSchema } from './schemas/file.schema';
-import { UploadStatusService } from './upload-status.service';
 
 @Module({
   imports: [
@@ -21,7 +22,12 @@ import { UploadStatusService } from './upload-status.service';
     ),
   ],
   controllers: [FilesController],
-  providers: [FilesService, UploadStatusService, FilesUploadProcessor],
+  providers: [
+    FilesService,
+    FilesUploadProcessor,
+    FilesCompressionProcessor,
+    FilesCompressionCron,
+  ],
   exports: [MongooseModule, FilesService],
 })
 export class FilesModule {}
