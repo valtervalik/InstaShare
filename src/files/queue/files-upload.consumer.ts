@@ -49,7 +49,7 @@ export class FilesUploadProcessor extends WorkerHost {
       this.path + body.filename,
     );
 
-    const newFile = await this.filesService.create(
+    await this.filesService.create(
       {
         filename: fileName,
         category: body.category,
