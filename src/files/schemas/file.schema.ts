@@ -3,6 +3,7 @@ import mongoose, { HydratedDocument } from 'mongoose';
 import { BaseSchema } from 'src/base/base.schema';
 import { FileCategory } from 'src/file-categories/schemas/file-category.schema';
 import { User } from 'src/users/schemas/user.schema';
+import { FileStatusEnum } from '../enums/file-status.enum';
 
 export type FileDocument = HydratedDocument<File>;
 
@@ -13,6 +14,9 @@ export class File extends BaseSchema {
 
   @Prop({ type: Number })
   size: number;
+
+  @Prop({ enum: FileStatusEnum, default: FileStatusEnum.RAW })
+  status: string;
 
   @Prop({ type: Number })
   compressedSize: number;
