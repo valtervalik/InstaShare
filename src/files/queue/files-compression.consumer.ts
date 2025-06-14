@@ -1,11 +1,10 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
-import { HttpStatus } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as AdmZip from 'adm-zip';
 import { Job } from 'bullmq';
+import { TypedEventEmitter } from 'src/common/types/typed-event-emitter/typed-event-emitter.class';
 import { AllConfigType } from 'src/config/config.type';
 import { MinioService } from 'src/minio/minio.service';
-import { apiResponseHandler } from 'src/utils/ApiResponseHandler';
 import { FilesQueueKeys } from '../constants/files-queue-keys.enum';
 import { FileStatusEnum } from '../enums/file-status.enum';
 import { FilesService } from '../files.service';
@@ -23,6 +22,7 @@ export class FilesCompressionProcessor extends WorkerHost {
     private readonly minioService: MinioService,
     private readonly filesService: FilesService,
     private readonly configService: ConfigService<AllConfigType>,
+    private readonly eventEmitter: TypedEventEmitter,
   ) {
     super();
     this.path = this.configService.get('files.path', { infer: true });
@@ -60,10 +60,8 @@ export class FilesCompressionProcessor extends WorkerHost {
       await this.minioService.deleteFile(file.ref);
     }
 
-    return apiResponseHandler(
-      'File compression completed successfully',
-      HttpStatus.ACCEPTED,
-      token,
-    );
+    this.eventEmitter.emit('files.compressed', {
+      message: 'Files compressed successfully',
+    });
   }
 }

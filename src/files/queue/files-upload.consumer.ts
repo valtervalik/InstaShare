@@ -1,11 +1,10 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
-import { HttpStatus } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Job } from 'bullmq';
 import { ActiveUserData } from 'src/auth/interfaces/active-user-data.interface';
+import { TypedEventEmitter } from 'src/common/types/typed-event-emitter/typed-event-emitter.class';
 import { AllConfigType } from 'src/config/config.type';
 import { MinioService } from 'src/minio/minio.service';
-import { apiResponseHandler } from 'src/utils/ApiResponseHandler';
 import { FilesQueueKeys } from '../constants/files-queue-keys.enum';
 import { CreateFileDto } from '../dto/create-file.dto';
 import { FilesService } from '../files.service';
@@ -24,6 +23,7 @@ export class FilesUploadProcessor extends WorkerHost {
     private readonly filesService: FilesService,
     private readonly minioService: MinioService,
     private readonly configService: ConfigService<AllConfigType>,
+    private readonly eventEmitter: TypedEventEmitter,
   ) {
     super();
     this.path = this.configService.get('files.path', { infer: true });
@@ -59,10 +59,8 @@ export class FilesUploadProcessor extends WorkerHost {
       activeUser,
     );
 
-    return apiResponseHandler(
-      'File uploaded successfully',
-      HttpStatus.CREATED,
-      token,
-    );
+    this.eventEmitter.emit('files.uploaded', {
+      message: 'File uploaded successfully',
+    });
   }
 }
