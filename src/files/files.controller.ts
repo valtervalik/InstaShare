@@ -7,12 +7,14 @@ import {
   Delete,
   Get,
   HttpStatus,
+  MessageEvent,
   NotFoundException,
   Param,
   Patch,
   Post,
   Query,
   Res,
+  Sse,
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
@@ -21,8 +23,13 @@ import { ParseObjectIdPipe } from '@nestjs/mongoose';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Queue } from 'bullmq';
 import { Response } from 'express';
+import { Observable } from 'rxjs';
+import { Auth } from 'src/auth/authentication/decorators/auth.decorator';
+import { AuthType } from 'src/auth/authentication/enums/auth-type.enum';
 import { ActiveUser } from 'src/auth/decorators/active-user.decorator';
 import { ActiveUserData } from 'src/auth/interfaces/active-user-data.interface';
+import { EventPayloads } from 'src/common/interfaces/event-emitter/event-payloads.interface';
+import { TypedEventEmitter } from 'src/common/types/typed-event-emitter/typed-event-emitter.class';
 import { AllConfigType } from 'src/config/config.type';
 import { MinioService } from 'src/minio/minio.service';
 import { apiResponseHandler } from 'src/utils/ApiResponseHandler';
@@ -42,6 +49,7 @@ export class FilesController {
     private readonly minioService: MinioService,
     private readonly httpService: HttpService,
     private readonly configService: ConfigService<AllConfigType>,
+    private readonly eventEmitter: TypedEventEmitter,
   ) {
     this.path = this.configService.get('files.path', { infer: true });
   }
@@ -164,5 +172,29 @@ export class FilesController {
     await this.filesService.remove(id);
 
     return apiResponseHandler('File deleted successfully', HttpStatus.OK);
+  }
+
+  @Auth(AuthType.None)
+  @Sse('sse')
+  sse(): Observable<MessageEvent> {
+    return new Observable((observer) => {
+      const compressionListener = (
+        payload: EventPayloads['files.compressed'],
+      ) => {
+        observer.next({ data: payload });
+      };
+
+      const uploadListener = (payload: EventPayloads['files.uploaded']) => {
+        observer.next({ data: payload });
+      };
+
+      this.eventEmitter.on('files.compressed', compressionListener);
+      this.eventEmitter.on('files.uploaded', uploadListener);
+
+      return () => {
+        this.eventEmitter.off('files.compressed', compressionListener);
+        this.eventEmitter.off('files.uploaded', uploadListener);
+      };
+    });
   }
 }
