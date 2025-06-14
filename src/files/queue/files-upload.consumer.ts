@@ -60,7 +60,7 @@ export class FilesUploadProcessor extends WorkerHost {
     );
 
     this.eventEmitter.emit('files.uploaded', {
-      message: 'File uploaded successfully',
+      message: `File uploaded successfully: ${fileName}`,
     });
   }
 }

@@ -188,10 +188,18 @@ export class FilesController {
         observer.next({ data: payload });
       };
 
+      const heartbeat = setInterval(() => {
+        observer.next({
+          data: { type: 'heartbeat', timestamp: Date.now() },
+          type: 'heartbeat',
+        });
+      }, 1000);
+
       this.eventEmitter.on('files.compressed', compressionListener);
       this.eventEmitter.on('files.uploaded', uploadListener);
 
       return () => {
+        clearInterval(heartbeat);
         this.eventEmitter.off('files.compressed', compressionListener);
         this.eventEmitter.off('files.uploaded', uploadListener);
       };
