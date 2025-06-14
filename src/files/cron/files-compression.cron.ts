@@ -3,6 +3,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { Queue } from 'bullmq';
 import { FilesQueueKeys } from '../constants/files-queue-keys.enum';
+import { FileStatusEnum } from '../enums/file-status.enum';
 import { FilesService } from '../files.service';
 
 @Injectable()
@@ -20,7 +21,7 @@ export class FilesCompressionCron {
     this.logger.debug('Starting file compression processing');
 
     const filesToCompress = await this.filesService.findAllWithoutPagination({
-      status: 'raw',
+      status: FileStatusEnum.RAW,
     });
 
     if (!filesToCompress.total) {

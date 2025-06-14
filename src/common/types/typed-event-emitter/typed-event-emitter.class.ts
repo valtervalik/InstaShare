@@ -12,4 +12,20 @@ export class TypedEventEmitter {
   ): Promise<any[]> {
     return this.eventEmitter.emitAsync(event, payload);
   }
+
+  on<K extends keyof EventPayloads>(
+    event: K,
+    listener: (payload: EventPayloads[K]) => void,
+  ): this {
+    this.eventEmitter.on(event, listener);
+    return this;
+  }
+
+  off<K extends keyof EventPayloads>(
+    event: K,
+    listener: (payload: EventPayloads[K]) => void,
+  ): this {
+    this.eventEmitter.off(event, listener);
+    return this;
+  }
 }
