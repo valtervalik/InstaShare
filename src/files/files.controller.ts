@@ -19,11 +19,12 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { JwtService } from '@nestjs/jwt';
 import { ParseObjectIdPipe } from '@nestjs/mongoose';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Queue } from 'bullmq';
 import { Response } from 'express';
-import { Observable } from 'rxjs';
+import { Observable, Observer } from 'rxjs';
 import { Auth } from 'src/auth/authentication/decorators/auth.decorator';
 import { AuthType } from 'src/auth/authentication/enums/auth-type.enum';
 import { ActiveUser } from 'src/auth/decorators/active-user.decorator';
@@ -41,6 +42,7 @@ import { FilesService } from './files.service';
 @Controller('files')
 export class FilesController {
   private readonly path: string;
+  private readonly clients: Map<string, Observer<MessageEvent>> = new Map();
 
   constructor(
     @InjectQueue(FilesQueueKeys.UPLOAD)
@@ -50,6 +52,7 @@ export class FilesController {
     private readonly httpService: HttpService,
     private readonly configService: ConfigService<AllConfigType>,
     private readonly eventEmitter: TypedEventEmitter,
+    private readonly jwtService: JwtService,
   ) {
     this.path = this.configService.get('files.path', { infer: true });
   }
@@ -176,16 +179,28 @@ export class FilesController {
 
   @Auth(AuthType.None)
   @Sse('sse')
-  sse(): Observable<MessageEvent> {
+  sse(@Query() data: { token: string }): Observable<MessageEvent> {
+    const decoded = this.jwtService.decode(data.token) as ActiveUserData;
+
+    if (!decoded || !decoded.sub) {
+      throw new BadRequestException('Invalid token');
+    }
+    const clientId = decoded.sub;
     return new Observable((observer) => {
+      this.clients.set(clientId, observer);
+
       const compressionListener = (
         payload: EventPayloads['files.compressed'],
       ) => {
-        observer.next({ data: payload });
+        if (payload.clientId === clientId) {
+          observer.next({ data: payload });
+        }
       };
 
       const uploadListener = (payload: EventPayloads['files.uploaded']) => {
-        observer.next({ data: payload });
+        if (payload.clientId === clientId) {
+          observer.next({ data: payload });
+        }
       };
 
       const heartbeat = setInterval(() => {
