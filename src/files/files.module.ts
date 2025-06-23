@@ -1,7 +1,9 @@
 import { HttpModule } from '@nestjs/axios';
 import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
+import { JwtModule } from '@nestjs/jwt';
 import { MongooseModule } from '@nestjs/mongoose';
+import authConfig from 'src/auth/config/auth.config';
 import { MinioModule } from 'src/minio/minio.module';
 import { FilesQueueKeys } from './constants/files-queue-keys.enum';
 import { FilesCompressionCron } from './cron/files-compression.cron';
@@ -20,6 +22,7 @@ import { File, FileSchema } from './schemas/file.schema';
       { name: FilesQueueKeys.UPLOAD },
       { name: FilesQueueKeys.COMPRESSION },
     ),
+    JwtModule.registerAsync(authConfig.asProvider()),
   ],
   controllers: [FilesController],
   providers: [

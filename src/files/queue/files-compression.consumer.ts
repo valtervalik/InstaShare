@@ -33,6 +33,11 @@ export class FilesCompressionProcessor extends WorkerHost {
 
     const { files } = job.data;
 
+    // Collect unique client IDs
+    const uniqueClientIds = [
+      ...new Set(files.map((file) => file.createdBy.toString())),
+    ];
+
     for (const file of files) {
       const zip = new AdmZip();
       const fileBuffer = await this.minioService.getFileBuffer(file.ref);
@@ -60,8 +65,12 @@ export class FilesCompressionProcessor extends WorkerHost {
       await this.minioService.deleteFile(file.ref);
     }
 
-    this.eventEmitter.emit('files.compressed', {
-      message: 'Files compressed successfully',
-    });
+    // Emit event for each unique client
+    for (const clientId of uniqueClientIds) {
+      this.eventEmitter.emit('files.compressed', {
+        message: 'Files compressed successfully',
+        clientId,
+      });
+    }
   }
 }

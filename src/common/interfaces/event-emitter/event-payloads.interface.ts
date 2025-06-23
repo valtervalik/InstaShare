@@ -3,6 +3,6 @@ export interface EventPayloads {
   'user.welcome': { email: string };
 
   // Files Events
-  'files.compressed': { message: string };
-  'files.uploaded': { message: string };
+  'files.compressed': { message: string; clientId: string };
+  'files.uploaded': { message: string; clientId: string };
 }
